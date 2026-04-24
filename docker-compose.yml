@@ -1,0 +1,23 @@
+services:
+  trace:
+    build: .
+    image: trace_gpx:latest
+    container_name: trace_gpx
+    ports:
+      - "9016:3000"
+    environment:
+      PORT: "3000"
+      DB_PATH: "/app/data/trace.db"
+      RUST_LOG: "info,trace_gpx=debug"
+    volumes:
+      - trace_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  trace_data:

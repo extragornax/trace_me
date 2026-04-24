@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Trace — Tracking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F3ECD9; --ink: #0E1424; --ink-soft: #2A2F3E;
+    --mustard: #D9A326; --vermilion: #E54B2A; --teal: #2C6B7E;
+    --green: #2a8c4a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: "Space Mono", monospace;
+    background: var(--ink);
+    color: var(--paper);
+    min-height: 100dvh;
+    display: flex; flex-direction: column;
+    padding: 20px 20px 32px;
+    gap: 16px;
+  }
+  h1 {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+  }
+  h1 span { color: var(--teal); }
+  .meta { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-soft); color: #777; }
+  .share-box {
+    background: var(--ink-soft);
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 12px 14px;
+    display: none; gap: 8px; flex-direction: column;
+  }
+  .share-box.visible { display: flex; }
+  .share-url {
+    font-size: 13px;
+    word-break: break-all;
+    color: var(--mustard);
+    cursor: pointer;
+  }
+  .share-url:hover { text-decoration: underline; }
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    flex: 1;
+  }
+  .stat {
+    background: rgba(255,255,255,.05);
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 14px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .stat .label { font-size: 10px; text-transform: uppercase; letter-spacing: .14em; color: #777; }
+  .stat .value { font-size: 28px; font-weight: 700; font-family: "Bricolage Grotesque", sans-serif; }
+  .stat .unit { font-size: 11px; color: #777; }
+  .controls { display: flex; gap: 10px; }
+  .btn {
+    flex: 1;
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: .02em;
+    border: 2px solid;
+    border-radius: 8px;
+    padding: 16px 12px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: transform .12s ease;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-start { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn-stop  { background: var(--vermilion); border-color: var(--vermilion); color: #fff; }
+  .btn-share { background: transparent; border-color: var(--teal); color: var(--teal); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .toggle {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; color: #999;
+  }
+  .toggle input { width: 18px; height: 18px; accent-color: var(--mustard); }
+  .status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #555;
+    margin-right: 6px;
+  }
+  .status-dot.active { background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+  .queue-badge {
+    font-size: 10px;
+    color: var(--vermilion);
+    display: none;
+  }
+  .queue-badge.visible { display: inline; }
+</style>
+</head>
+<body>
+
+<div>
+  <h1>trace<span>.</span></h1>
+  <div class="meta">
+    <span class="status-dot" id="dot"></span>
+    <span id="status-text">Ready</span>
+    <span class="queue-badge" id="queue-badge">• 0 queued</span>
+  </div>
+</div>
+
+<div class="share-box" id="share-box">
+  <div class="meta">Share this link so others can follow you live</div>
+  <div class="share-url" id="share-url" title="Click to copy"></div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="label">Speed</div>
+    <div><span class="value" id="speed">—</span> <span class="unit">km/h</span></div>
+  </div>
+  <div class="stat">
+    <div class="label">Distance</div>
+    <div><span class="value" id="distance">0.0</span> <span class="unit">km</span></div>
+  </div>
+  <div class="stat">
+    <div class="label">Elevation</div>
+    <div><span class="value" id="elevation">—</span> <span class="unit">m</span></div>
+  </div>
+  <div class="stat">
+    <div class="label">Pings sent</div>
+    <div><span class="value" id="pings">0</span></div>
+  </div>
+</div>
+
+<div class="toggle">
+  <input type="checkbox" id="low-power">
+  <label for="low-power">Low-power mode (ping every 2 min instead of 15 s)</label>
+</div>
+
+<div class="controls">
+  <button class="btn btn-start" id="btn-start">Start</button>
+  <button class="btn btn-stop" id="btn-stop" disabled>Stop</button>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const BASE = location.origin;
+
+let sessionId = null;
+let watchId = null;
+let pingTimer = null;
+let lastPos = null;
+let totalDist = 0;
+let pingCount = 0;
+let queue = [];
+let prevLat = null, prevLon = null;
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLon = (lon2-lon1) * Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function interval() {
+  return $('low-power').checked ? 120000 : 15000;
+}
+
+async function createSession() {
+  const res = await fetch(`${BASE}/api/sessions`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name: null, hours: 48 }),
+  });
+  if (!res.ok) throw new Error('Failed to create session');
+  return (await res.json()).id;
+}
+
+async function sendPing(ping) {
+  try {
+    const res = await fetch(`${BASE}/api/sessions/${sessionId}/ping`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(ping),
+    });
+    if (!res.ok) throw new Error(res.status);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function flushQueue() {
+  while (queue.length > 0) {
+    const ping = queue[0];
+    if (await sendPing(ping)) {
+      queue.shift();
+      pingCount++;
+      $('pings').textContent = pingCount;
+    } else {
+      break;
+    }
+  }
+  updateQueueBadge();
+}
+
+function updateQueueBadge() {
+  const badge = $('queue-badge');
+  if (queue.length > 0) {
+    badge.textContent = `• ${queue.length} queued`;
+    badge.classList.add('visible');
+  } else {
+    badge.classList.remove('visible');
+  }
+}
+
+function onPosition(pos) {
+  const lat = pos.coords.latitude;
+  const lon = pos.coords.longitude;
+  const ele = pos.coords.altitude;
+  const speed = pos.coords.speed;
+  const heading = pos.coords.heading;
+
+  if (prevLat !== null) {
+    totalDist += haversine(prevLat, prevLon, lat, lon);
+  }
+  prevLat = lat;
+  prevLon = lon;
+
+  $('speed').textContent = speed != null ? (speed * 3.6).toFixed(1) : '—';
+  $('distance').textContent = totalDist.toFixed(1);
+  $('elevation').textContent = ele != null ? Math.round(ele) : '—';
+
+  lastPos = {
+    ts: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    lat, lon,
+    ele: ele != null ? Math.round(ele * 10) / 10 : null,
+    speed: speed != null ? Math.round(speed * 36) / 10 : null,
+    heading: heading != null ? Math.round(heading * 10) / 10 : null,
+  };
+}
+
+function enqueuePing() {
+  if (!lastPos) return;
+  queue.push({...lastPos});
+  flushQueue();
+}
+
+async function start() {
+  try {
+    sessionId = await createSession();
+  } catch (e) {
+    alert('Could not create session: ' + e.message);
+    return;
+  }
+
+  const viewUrl = `${BASE}/view.html#${sessionId}`;
+  $('share-url').textContent = viewUrl;
+  $('share-box').classList.add('visible');
+  $('share-url').onclick = () => {
+    navigator.clipboard.writeText(viewUrl).then(() => {
+      $('share-url').textContent = 'Copied!';
+      setTimeout(() => $('share-url').textContent = viewUrl, 1500);
+    });
+  };
+
+  $('btn-start').disabled = true;
+  $('btn-stop').disabled = false;
+  $('dot').classList.add('active');
+  $('status-text').textContent = 'Tracking — ' + sessionId;
+
+  watchId = navigator.geolocation.watchPosition(onPosition, err => {
+    console.warn('Geo error:', err);
+  }, { enableHighAccuracy: true, maximumAge: 5000 });
+
+  pingTimer = setInterval(enqueuePing, interval());
+
+  $('low-power').addEventListener('change', () => {
+    if (pingTimer) {
+      clearInterval(pingTimer);
+      pingTimer = setInterval(enqueuePing, interval());
+    }
+  });
+}
+
+function stop() {
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  if (pingTimer) clearInterval(pingTimer);
+  enqueuePing(); // one last ping
+
+  $('btn-start').disabled = false;
+  $('btn-stop').disabled = true;
+  $('dot').classList.remove('active');
+  $('status-text').textContent = 'Stopped';
+  watchId = null;
+  pingTimer = null;
+}
+
+$('btn-start').onclick = start;
+$('btn-stop').onclick = stop;
+</script>
+
+</body>
+</html>

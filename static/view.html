@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trace — Live View</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F3ECD9; --ink: #0E1424; --ink-soft: #2A2F3E;
+    --mustard: #D9A326; --vermilion: #E54B2A; --teal: #2C6B7E;
+    --green: #2a8c4a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Space Mono", monospace;
+    background: var(--ink);
+    color: var(--paper);
+    display: flex; flex-direction: column;
+  }
+  #map { flex: 1; z-index: 0; }
+  .hud {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 1000;
+    background: rgba(14,20,36,.88);
+    backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid #333;
+    gap: 12px; flex-wrap: wrap;
+  }
+  .hud-brand {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+  }
+  .hud-brand span { color: var(--teal); }
+  .hud-stats { display: flex; gap: 18px; }
+  .hud-stat { display: flex; flex-direction: column; align-items: center; }
+  .hud-stat .val { font-size: 18px; font-weight: 700; font-family: "Bricolage Grotesque", sans-serif; }
+  .hud-stat .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .14em; color: #888; }
+  .status-pill {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+  }
+  .status-pill.live { background: rgba(42,140,74,.2); border-color: var(--green); color: var(--green); }
+  .status-pill.off  { background: rgba(229,75,42,.15); border-color: var(--vermilion); color: var(--vermilion); }
+  .no-session {
+    display: flex; align-items: center; justify-content: center;
+    flex: 1;
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 22px; color: #555;
+    text-align: center; padding: 40px;
+  }
+</style>
+</head>
+<body>
+
+<div class="hud" id="hud">
+  <div class="hud-brand">trace<span>.</span></div>
+  <div class="hud-stats">
+    <div class="hud-stat"><span class="val" id="v-speed">—</span><span class="lbl">km/h</span></div>
+    <div class="hud-stat"><span class="val" id="v-dist">—</span><span class="lbl">km</span></div>
+    <div class="hud-stat"><span class="val" id="v-ele">—</span><span class="lbl">m</span></div>
+    <div class="hud-stat"><span class="val" id="v-pings">0</span><span class="lbl">pings</span></div>
+  </div>
+  <div class="status-pill off" id="pill">connecting</div>
+</div>
+
+<div id="map"></div>
+<div class="no-session" id="no-session" style="display:none">No session ID in URL.<br>Ask the rider for a share link.</div>
+
+<script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const sessionId = location.hash.slice(1);
+
+if (!sessionId) {
+  $('hud').style.display = 'none';
+  $('map').style.display = 'none';
+  $('no-session').style.display = 'flex';
+} else {
+  init();
+}
+
+async function init() {
+  const map = L.map('map', { zoomControl: false }).setView([48.86, 2.35], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19,
+  }).addTo(map);
+
+  // Offset for HUD
+  map.getContainer().style.marginTop = '0';
+
+  const trail = L.polyline([], { color: '#E54B2A', weight: 3, opacity: .8 }).addTo(map);
+  const gpxLine = L.polyline([], { color: '#2C6B7E', weight: 2, opacity: .5, dashArray: '8 6' }).addTo(map);
+
+  const riderIcon = L.divIcon({
+    className: '',
+    html: '<div style="width:16px;height:16px;border-radius:50%;background:#E54B2A;border:3px solid #fff;box-shadow:0 0 8px rgba(229,75,42,.6)"></div>',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+  let marker = null;
+  let pingCount = 0;
+  let totalDist = 0;
+  let prevLat = null, prevLon = null;
+
+  function haversine(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2-lat1)*Math.PI/180;
+    const dLon = (lon2-lon1)*Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function addPing(p) {
+    const ll = [p.lat, p.lon];
+    trail.addLatLng(ll);
+
+    if (prevLat !== null) totalDist += haversine(prevLat, prevLon, p.lat, p.lon);
+    prevLat = p.lat; prevLon = p.lon;
+
+    if (!marker) {
+      marker = L.marker(ll, { icon: riderIcon }).addTo(map);
+      map.setView(ll, 13);
+    } else {
+      marker.setLatLng(ll);
+    }
+
+    pingCount++;
+    $('v-speed').textContent = p.speed != null ? p.speed.toFixed(1) : '—';
+    $('v-dist').textContent = totalDist.toFixed(1);
+    $('v-ele').textContent = p.ele != null ? Math.round(p.ele) : '—';
+    $('v-pings').textContent = pingCount;
+  }
+
+  // Load existing session data
+  try {
+    const res = await fetch(`/api/sessions/${sessionId}`);
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+
+    if (data.gpx) {
+      gpxLine.setLatLngs(data.gpx.map(p => [p.lat, p.lon]));
+      if (data.gpx.length > 0 && data.pings.length === 0) {
+        map.fitBounds(gpxLine.getBounds(), { padding: [40, 40] });
+      }
+    }
+
+    for (const p of data.pings) addPing(p);
+    if (data.pings.length > 0) {
+      map.setView([data.pings.at(-1).lat, data.pings.at(-1).lon], 13);
+    }
+  } catch (e) {
+    console.warn('Failed to load session:', e);
+  }
+
+  // WebSocket for live updates
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/api/sessions/${sessionId}/ws`);
+
+  ws.onopen = () => {
+    $('pill').textContent = 'live';
+    $('pill').className = 'status-pill live';
+  };
+  ws.onmessage = (e) => {
+    const ping = JSON.parse(e.data);
+    addPing(ping);
+    map.panTo([ping.lat, ping.lon]);
+  };
+  ws.onclose = () => {
+    $('pill').textContent = 'offline';
+    $('pill').className = 'status-pill off';
+  };
+
+  // Resize map when HUD settles
+  setTimeout(() => map.invalidateSize(), 200);
+}
+</script>
+
+</body>
+</html>

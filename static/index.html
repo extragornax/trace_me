@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trace — self-hosted live GPS tracking</title>
+<meta name="description" content="Share your live position on a bike ride with a link. No account, no app, no cloud. Self-hosted.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F3ECD9; --paper-2: #EADFBE; --ink: #0E1424; --ink-soft: #2A2F3E;
+    --mustard: #D9A326; --vermilion: #E54B2A; --teal: #2C6B7E;
+    --rule: rgba(14,20,36,.18);
+  }
+  *,*::before,*::after { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 17px; line-height: 1.55;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    opacity: .28; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.055  0 0 0 0 0.078  0 0 0 0 0.141  0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+  a { color: var(--ink); }
+
+  .wrap { max-width: 720px; margin: 0 auto; padding: 48px 28px 96px; }
+
+  .brand {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-weight: 800; font-size: clamp(56px, 14vw, 120px);
+    letter-spacing: -0.03em; line-height: .9; margin: 0;
+  }
+  .brand em {
+    font-family: "Fraunces", serif; font-style: italic;
+    font-weight: 400; color: var(--teal);
+  }
+  .brand .dot {
+    display: inline-block; width: .36em; height: .36em;
+    border-radius: 50%; background: var(--vermilion);
+    vertical-align: .18em; margin-left: .06em;
+  }
+
+  .eyebrow {
+    font-family: "Space Mono", monospace;
+    font-size: 11px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--vermilion);
+    margin-bottom: 18px;
+  }
+  .lede {
+    max-width: 600px; margin: 28px 0 0;
+    font-size: clamp(16px, 1.8vw, 20px); color: var(--ink-soft);
+  }
+  .lede b { color: var(--ink); font-weight: 600; }
+
+  .steps {
+    margin-top: 52px; display: flex; flex-direction: column; gap: 0;
+    border-top: 2px solid var(--ink);
+  }
+  .step {
+    display: grid; grid-template-columns: 48px 1fr; gap: 16px;
+    padding: 22px 0; border-bottom: 1px solid var(--rule);
+    align-items: start;
+  }
+  .step-num {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-weight: 800; font-size: 32px; color: var(--teal);
+    text-align: center;
+  }
+  .step h3 {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 20px; font-weight: 700;
+    letter-spacing: -0.01em; margin: 0 0 4px;
+  }
+  .step p { margin: 0; color: var(--ink-soft); font-size: 15px; }
+
+  .cta {
+    display: inline-block; margin-top: 44px;
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-weight: 700; font-size: 18px;
+    text-transform: uppercase; letter-spacing: .04em;
+    background: var(--vermilion); color: var(--paper);
+    border: 2px solid var(--ink); padding: 16px 36px;
+    text-decoration: none;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .cta:hover { transform: translate(-2px,-2px); box-shadow: 4px 4px 0 var(--ink); }
+
+  .features {
+    margin-top: 56px; display: grid;
+    grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .feat {
+    border: 1px solid var(--ink); background: var(--paper-2);
+    padding: 18px 16px;
+  }
+  .feat h4 {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 16px; font-weight: 700; margin: 0 0 6px;
+  }
+  .feat p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+
+  .foot {
+    margin-top: 60px; border-top: 1px solid var(--rule);
+    padding-top: 16px;
+    font-family: "Space Mono", monospace;
+    font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-soft);
+  }
+  .foot a { color: var(--vermilion); text-decoration: none; }
+  .foot a:hover { text-decoration: underline; }
+
+  @media (max-width: 560px) {
+    .wrap { padding: 28px 18px 72px; }
+    .features { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="eyebrow">— self-hosted live GPS tracking</div>
+  <h1 class="brand">trace<em>.</em><span class="dot"></span></h1>
+
+  <p class="lede">
+    Share your <b>live position</b> on a bike ride with a single link.
+    No account, no app store, no cloud — just your phone's GPS pinging a
+    server you own. Friends and family see you move on a map in real time.
+    Sessions auto-expire after <b>48 hours</b>.
+  </p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <h3>Start tracking</h3>
+        <p>Open the tracker on your phone, hit Start. Your browser's GPS sends a ping every 15 seconds (or 2 min in low-power mode).</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <h3>Share the link</h3>
+        <p>You get a unique URL. Send it to anyone — they open it in a browser and see your breadcrumb trail on a live map, with speed, distance and elevation.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <h3>Ride</h3>
+        <p>Pings queue locally if you lose signal and flush when you're back online. The session lives for 48 h, then it's gone — no permanent tracking.</p>
+      </div>
+    </div>
+  </div>
+
+  <a class="cta" href="/tracker.html">Start tracking</a>
+
+  <div class="features">
+    <div class="feat">
+      <h4>No account</h4>
+      <p>No login, no registration, no token. A fresh session is one POST.</p>
+    </div>
+    <div class="feat">
+      <h4>Offline-resilient</h4>
+      <p>Pings queue in the browser when cell is down and flush when you're back.</p>
+    </div>
+    <div class="feat">
+      <h4>Low-power mode</h4>
+      <p>Toggle from 15 s to 2 min pings — saves battery on a 20 h brevet.</p>
+    </div>
+    <div class="feat">
+      <h4>Optional GPX overlay</h4>
+      <p>Attach a planned route so the spectator sees where you're headed, not just where you've been.</p>
+    </div>
+    <div class="feat">
+      <h4>Self-hosted</h4>
+      <p>Rust + Axum + SQLite in a Docker container. Your data on your box.</p>
+    </div>
+    <div class="feat">
+      <h4>Auto-purge</h4>
+      <p>Sessions and pings are deleted after 48 h. Nothing lingers.</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    part of <a href="https://extragornax.fr">extragornax.fr</a> · <a href="https://github.com/extragornax">github</a>
+  </div>
+
+</div>
+
+</body>
+</html>
