@@ -2,6 +2,7 @@ FROM rust:latest AS builder
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
+COPY static/ static/
 RUN cargo build --release --locked
 
 FROM debian:12-slim
