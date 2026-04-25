@@ -13,12 +13,11 @@ use crate::SharedState;
 pub fn api_router() -> Router<SharedState> {
     Router::new()
         .route("/sessions", post(create_session))
-        .route("/sessions/{id}", get(get_session))
-        .route("/sessions/{id}/ping", post(post_ping))
-        .route("/sessions/{id}/pings", get(get_pings))
-        .route("/sessions/{id}/gpx", post(upload_gpx))
-        .route("/sessions/{id}/gpx", get(get_gpx))
-        .route("/sessions/{id}/ws", get(ws_upgrade))
+        .route("/sessions/:id", get(get_session))
+        .route("/sessions/:id/ping", post(post_ping))
+        .route("/sessions/:id/pings", get(get_pings))
+        .route("/sessions/:id/gpx", get(get_gpx).post(upload_gpx))
+        .route("/sessions/:id/ws", get(ws_upgrade))
 }
 
 #[derive(Deserialize)]

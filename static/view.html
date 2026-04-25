@@ -22,7 +22,7 @@
     color: var(--paper);
     display: flex; flex-direction: column;
   }
-  #map { flex: 1; z-index: 0; }
+  #map { flex: 1; z-index: 0; margin-top: 56px; }
   .hud {
     position: absolute; top: 0; left: 0; right: 0; z-index: 1000;
     background: rgba(14,20,36,.88);
@@ -162,25 +162,28 @@ async function init() {
     console.warn('Failed to load session:', e);
   }
 
-  // WebSocket for live updates
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/api/sessions/${sessionId}/ws`);
+  const wsUrl = `${proto}://${location.host}/api/sessions/${sessionId}/ws`;
 
-  ws.onopen = () => {
-    $('pill').textContent = 'live';
-    $('pill').className = 'status-pill live';
-  };
-  ws.onmessage = (e) => {
-    const ping = JSON.parse(e.data);
-    addPing(ping);
-    map.panTo([ping.lat, ping.lon]);
-  };
-  ws.onclose = () => {
-    $('pill').textContent = 'offline';
-    $('pill').className = 'status-pill off';
-  };
+  function connectWs() {
+    const ws = new WebSocket(wsUrl);
+    ws.onopen = () => {
+      $('pill').textContent = 'live';
+      $('pill').className = 'status-pill live';
+    };
+    ws.onmessage = (e) => {
+      const ping = JSON.parse(e.data);
+      addPing(ping);
+      map.panTo([ping.lat, ping.lon]);
+    };
+    ws.onclose = () => {
+      $('pill').textContent = 'offline';
+      $('pill').className = 'status-pill off';
+      setTimeout(connectWs, 3000);
+    };
+  }
+  connectWs();
 
-  // Resize map when HUD settles
   setTimeout(() => map.invalidateSize(), 200);
 }
 </script>

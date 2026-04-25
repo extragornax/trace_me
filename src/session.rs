@@ -20,11 +20,6 @@ impl Channels {
             .clone()
     }
 
-    pub fn subscribe(&self, session_id: &str) -> Option<broadcast::Receiver<Ping>> {
-        let map = self.inner.lock().unwrap();
-        map.get(session_id).map(|tx| tx.subscribe())
-    }
-
     pub fn remove_if_empty(&self, session_id: &str) {
         let mut map = self.inner.lock().unwrap();
         if let Some(tx) = map.get(session_id) {

@@ -260,6 +260,18 @@ async function start() {
     return;
   }
 
+  totalDist = 0;
+  pingCount = 0;
+  prevLat = null;
+  prevLon = null;
+  lastPos = null;
+  queue = [];
+  $('speed').textContent = '—';
+  $('distance').textContent = '0.0';
+  $('elevation').textContent = '—';
+  $('pings').textContent = '0';
+  updateQueueBadge();
+
   const viewUrl = `${BASE}/view.html#${sessionId}`;
   $('share-url').textContent = viewUrl;
   $('share-box').classList.add('visible');
@@ -280,13 +292,6 @@ async function start() {
   }, { enableHighAccuracy: true, maximumAge: 5000 });
 
   pingTimer = setInterval(enqueuePing, interval());
-
-  $('low-power').addEventListener('change', () => {
-    if (pingTimer) {
-      clearInterval(pingTimer);
-      pingTimer = setInterval(enqueuePing, interval());
-    }
-  });
 }
 
 function stop() {
@@ -304,6 +309,12 @@ function stop() {
 
 $('btn-start').onclick = start;
 $('btn-stop').onclick = stop;
+$('low-power').addEventListener('change', () => {
+  if (pingTimer) {
+    clearInterval(pingTimer);
+    pingTimer = setInterval(enqueuePing, interval());
+  }
+});
 </script>
 
 </body>
