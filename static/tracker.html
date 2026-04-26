@@ -122,6 +122,8 @@
 <div class="share-box" id="share-box">
   <div class="meta">Share this link so others can follow you live</div>
   <div class="share-url" id="share-url" title="Click to copy"></div>
+  <div class="meta" style="margin-top:8px">OwnTracks URL (paste into app Settings &gt; Connection &gt; Host)</div>
+  <div class="share-url" id="owntracks-url" title="Click to copy"></div>
 </div>
 
 <div class="stats">
@@ -316,14 +318,21 @@ async function start() {
   updateQueueBadge();
 
   const viewUrl = `${BASE}/view.html#${sessionId}`;
+  const otUrl = `${BASE}/api/sessions/${sessionId}/owntracks`;
   $('share-url').textContent = viewUrl;
+  $('owntracks-url').textContent = otUrl;
   $('share-box').classList.add('visible');
-  $('share-url').onclick = () => {
-    navigator.clipboard.writeText(viewUrl).then(() => {
-      $('share-url').textContent = 'Copied!';
-      setTimeout(() => $('share-url').textContent = viewUrl, 1500);
-    });
-  };
+
+  function copyOnClick(el, url) {
+    el.onclick = () => {
+      navigator.clipboard.writeText(url).then(() => {
+        el.textContent = 'Copied!';
+        setTimeout(() => el.textContent = url, 1500);
+      });
+    };
+  }
+  copyOnClick($('share-url'), viewUrl);
+  copyOnClick($('owntracks-url'), otUrl);
 
   $('btn-start').disabled = true;
   $('btn-stop').disabled = false;

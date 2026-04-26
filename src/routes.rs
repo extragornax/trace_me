@@ -18,6 +18,7 @@ pub fn api_router() -> Router<SharedState> {
         .route("/sessions/:id/pings", get(get_pings))
         .route("/sessions/:id/gpx", get(get_gpx).post(upload_gpx))
         .route("/sessions/:id/ws", get(ws_upgrade))
+        .route("/sessions/:id/owntracks", post(owntracks_ping))
 }
 
 #[derive(Deserialize)]
@@ -114,6 +115,69 @@ async fn get_gpx(
         .ok_or(StatusCode::NOT_FOUND)?;
     let gpx = state.db.get_gpx(&id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(gpx))
+}
+
+#[derive(Deserialize)]
+struct OwnTracksPayload {
+    #[serde(rename = "_type")]
+    msg_type: Option<String>,
+    lat: Option<f64>,
+    lon: Option<f64>,
+    tst: Option<i64>,
+    alt: Option<f64>,
+    vel: Option<f64>,
+    cog: Option<f64>,
+}
+
+async fn owntracks_ping(
+    State(state): State<SharedState>,
+    Path(id): Path<String>,
+    body: String,
+) -> Result<Json<Vec<()>>, StatusCode> {
+    if body.is_empty() {
+        return Ok(Json(vec![]));
+    }
+
+    let payload: OwnTracksPayload =
+        serde_json::from_str(&body).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    if payload.msg_type.as_deref() != Some("location") {
+        return Ok(Json(vec![]));
+    }
+
+    let (lat, lon, tst) = match (payload.lat, payload.lon, payload.tst) {
+        (Some(lat), Some(lon), Some(tst)) => (lat, lon, tst),
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    state
+        .db
+        .get_session(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let ts = chrono::DateTime::from_timestamp(tst, 0)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+        .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
+
+    let ping = Ping {
+        ts,
+        lat,
+        lon,
+        ele: payload.alt,
+        speed: payload.vel,
+        heading: payload.cog,
+    };
+
+    state.db.insert_ping(&id, &ping).map_err(|e| {
+        tracing::error!("owntracks insert_ping: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let tx = state.channels.get_or_create(&id);
+    let _ = tx.send(ping);
+
+    Ok(Json(vec![]))
 }
 
 async fn ws_upgrade(
