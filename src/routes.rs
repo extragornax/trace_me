@@ -141,10 +141,10 @@ async fn handle_ws(
 
     let send_task = tokio::spawn(async move {
         while let Ok(ping) = rx.recv().await {
-            if let Ok(json) = serde_json::to_string(&ping) {
-                if sink.send(Message::Text(json.into())).await.is_err() {
-                    break;
-                }
+            if let Ok(json) = serde_json::to_string(&ping)
+                && sink.send(Message::Text(json)).await.is_err()
+            {
+                break;
             }
         }
     });

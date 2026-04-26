@@ -22,10 +22,10 @@ impl Channels {
 
     pub fn remove_if_empty(&self, session_id: &str) {
         let mut map = self.inner.lock().unwrap();
-        if let Some(tx) = map.get(session_id) {
-            if tx.receiver_count() == 0 {
-                map.remove(session_id);
-            }
+        if let Some(tx) = map.get(session_id)
+            && tx.receiver_count() == 0
+        {
+            map.remove(session_id);
         }
     }
 }
