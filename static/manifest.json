@@ -1,0 +1,14 @@
+{
+  "name": "Trace — Live GPS Tracker",
+  "short_name": "Trace",
+  "description": "Self-hosted live GPS tracking for bike rides",
+  "start_url": "/tracker.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0E1424",
+  "theme_color": "#0E1424",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

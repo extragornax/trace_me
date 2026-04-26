@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0E1424">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>Trace — Tracking</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -159,6 +165,43 @@ let totalDist = 0;
 let pingCount = 0;
 let queue = [];
 let prevLat = null, prevLon = null;
+let wakeLock = null;
+let audioCtx = null;
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
+
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch {}
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && watchId !== null && !wakeLock) {
+    acquireWakeLock();
+  }
+});
+
+function startSilentAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.001;
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+}
+
+function stopSilentAudio() {
+  if (!audioCtx) return;
+  audioCtx.close();
+  audioCtx = null;
+}
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -292,12 +335,18 @@ async function start() {
   }, { enableHighAccuracy: true, maximumAge: 5000 });
 
   pingTimer = setInterval(enqueuePing, interval());
+
+  acquireWakeLock();
+  startSilentAudio();
 }
 
 function stop() {
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   if (pingTimer) clearInterval(pingTimer);
-  enqueuePing(); // one last ping
+  enqueuePing();
+
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+  stopSilentAudio();
 
   $('btn-start').disabled = false;
   $('btn-stop').disabled = true;
