@@ -25,6 +25,14 @@ pub struct Ping {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Account {
+    pub id: String,
+    pub slug: String,
+    pub session_id: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GpxPoint {
     pub lat: f64,
     pub lon: f64,
@@ -58,7 +66,15 @@ impl Db {
                 speed       REAL,
                 heading     REAL
             );
-            CREATE INDEX IF NOT EXISTS idx_pings_session ON pings(session_id, ts);"
+            CREATE INDEX IF NOT EXISTS idx_pings_session ON pings(session_id, ts);
+            CREATE TABLE IF NOT EXISTS accounts (
+                id              TEXT PRIMARY KEY,
+                slug            TEXT UNIQUE NOT NULL,
+                password_hash   TEXT NOT NULL,
+                session_id      TEXT REFERENCES sessions(id),
+                created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_slug ON accounts(slug);"
         )?;
         Ok(())
     }
@@ -155,12 +171,84 @@ impl Db {
     pub fn purge_expired(&self) -> anyhow::Result<usize> {
         let conn = self.conn.lock().unwrap();
         let deleted = conn.execute(
-            "DELETE FROM sessions WHERE expires_at < datetime('now')",
+            "DELETE FROM sessions WHERE expires_at < datetime('now') AND id NOT IN (SELECT session_id FROM accounts WHERE session_id IS NOT NULL)",
             [],
         )?;
         if deleted > 0 {
             tracing::info!("purged {deleted} expired sessions");
         }
         Ok(deleted)
+    }
+
+    pub fn create_account(&self, id: &str, slug: &str, password_hash: &str) -> anyhow::Result<Account> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO accounts (id, slug, password_hash) VALUES (?1, ?2, ?3)",
+            params![id, slug, password_hash],
+        )?;
+        Ok(Account {
+            id: id.to_string(),
+            slug: slug.to_string(),
+            session_id: None,
+            created_at: conn.query_row("SELECT datetime('now')", [], |r| r.get(0))?,
+        })
+    }
+
+    pub fn get_account_by_slug(&self, slug: &str) -> anyhow::Result<Option<(Account, String)>> {
+        let conn = self.conn.lock().unwrap();
+        let result = conn.query_row(
+            "SELECT id, slug, password_hash, session_id, created_at FROM accounts WHERE slug = ?1",
+            params![slug],
+            |row| Ok((
+                Account {
+                    id: row.get(0)?,
+                    slug: row.get(1)?,
+                    session_id: row.get(3)?,
+                    created_at: row.get(4)?,
+                },
+                row.get::<_, String>(2)?,
+            )),
+        );
+        match result {
+            Ok(pair) => Ok(Some(pair)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn update_account_slug(&self, account_id: &str, new_slug: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE accounts SET slug = ?2 WHERE id = ?1",
+            params![account_id, new_slug],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_account_password(&self, account_id: &str, password_hash: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE accounts SET password_hash = ?2 WHERE id = ?1",
+            params![account_id, password_hash],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_account_session(&self, account_id: &str, session_id: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE accounts SET session_id = ?2 WHERE id = ?1",
+            params![account_id, session_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn renew_session(&self, session_id: &str, hours: u32) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET expires_at = datetime('now', ?2) WHERE id = ?1",
+            params![session_id, format!("+{hours} hours")],
+        )?;
+        Ok(())
     }
 }

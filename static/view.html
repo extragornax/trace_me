@@ -78,9 +78,11 @@
 <script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-const sessionId = location.hash.slice(1);
+const raw = location.hash.slice(1);
+const isAccount = raw.startsWith('@');
+const key = isAccount ? raw.slice(1) : raw;
 
-if (!sessionId) {
+if (!key) {
   $('hud').style.display = 'none';
   $('map').style.display = 'none';
   $('no-session').style.display = 'flex';
@@ -141,9 +143,10 @@ async function init() {
     $('v-pings').textContent = pingCount;
   }
 
-  // Load existing session data
+  const apiBase = isAccount ? `/api/accounts/${key}` : `/api/sessions/${key}`;
+
   try {
-    const res = await fetch(`/api/sessions/${sessionId}`);
+    const res = await fetch(apiBase);
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
 
@@ -163,7 +166,7 @@ async function init() {
   }
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const wsUrl = `${proto}://${location.host}/api/sessions/${sessionId}/ws`;
+  const wsUrl = `${proto}://${location.host}${apiBase}/ws`;
 
   function connectWs() {
     const ws = new WebSocket(wsUrl);
